@@ -1,0 +1,45 @@
+#!/bin/bash
+#
+# Tests. Run with: sudo env -i script
+#
+
+
+printenv
+set
+
+./appdump&
+pida=`pidof appdump`
+echo "Dumping $pida"
+ps -ef | grep appdump
+
+export HOME=/tmp
+export TERM=linux
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+/usr/bin/gdb \
+    --nx \
+    --batch \
+    --readnever \
+    -ex \
+    "set logging enabled on" \
+    -ex \
+    "set pagination off" \
+    -ex \
+    "set height 0" \
+    -ex \
+    "set width 0" \
+    -ex \
+    "set use-coredump-filter off" \
+    -ex \
+    "set dump-excluded-mappings on" \
+    -ex \
+    "attach $pida" \
+    -ex \
+    "gcore ./_kpc.core" \
+    -ex \
+    detach \
+    -ex \
+    quit \
+
+kill $pida
+ps -ef | grep appdump

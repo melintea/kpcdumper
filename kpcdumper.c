@@ -1,0 +1,204 @@
+/*   
+ * On-demand core dumping
+ */
+
+#include "kpcdumper.h"
+
+#include <asm/uaccess.h>
+#include <linux/init.h>
+#include <linux/interrupt.h>
+#include <linux/kernel.h>
+#include <linux/kmod.h>
+#include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/printk.h>
+#include <linux/spinlock.h>
+#include <linux/string.h>
+
+
+#ifdef BUFLEN
+#  error BUFLEN already defined
+#endif
+#define BUFLEN (4096) // PATH_MAX?
+
+
+#ifdef SUCCESS
+#  error SUCCESS already defined
+#endif
+#define SUCCESS (0) 
+
+
+static const char  _cmdsf[] = 
+    "/usr/bin/gdb " 
+       "--cd=/tmp "
+       "--nx --batch --readnever "
+       "-ex 'set logging enabled on' " 
+       "-ex 'set startup-with-shell off' "
+       "-ex 'set pagination off' -ex 'set height 0' -ex 'set width 0' "
+       "-ex 'set use-coredump-filter off' "
+       "-ex 'set dump-excluded-mappings on' "
+       "-ex 'set debug infrun 1' "
+       "-ex 'set debug lin-lwp 1' "
+       "-ex 'attach %d' -ex 'gcore %s' " 
+       "-ex detach -ex quit "
+   "; /usr/bin/kill -USR1 %d "
+   ;
+
+static DEFINE_MUTEX(_kpcdumper_lock);
+static char _cmds[BUFLEN+1]     = {0};
+static char _dumpfile[BUFLEN+1] = {0};
+
+/* 
+ * This is called whenever a process attempts to open the device file 
+ */
+static int 
+kpcdumper_open(struct inode *inode, struct file *file)
+{
+    printk(KERN_INFO KPCDUMPER_DEVNAME ": device_open(%p)\n", file);
+
+    mutex_lock(&_kpcdumper_lock);
+    
+    try_module_get(THIS_MODULE);
+    return SUCCESS;
+}
+
+static int 
+kpcdumper_release(struct inode *inode, struct file *file)
+{
+    printk(KERN_INFO KPCDUMPER_DEVNAME ": device_release(%p,%p)\n", inode, file);
+
+    mutex_unlock(&_kpcdumper_lock);
+
+    module_put(THIS_MODULE);
+    return SUCCESS;
+}
+
+static long 
+kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
+        struct file *file,    /* ditto */
+        unsigned int ioctl_num,    /* number and param for ioctl */
+        unsigned long ioctl_param)
+{
+    printk(KERN_INFO KPCDUMPER_DEVNAME ": kpcdumper_ioctl\n");
+    
+    pid_t procpid  = current->tgid;
+    pid_t threadid = current->pid;
+    
+    switch(ioctl_num) {
+    case IOCTL_SET_MSG:
+        int  length = 0;
+        char ch;
+        char *pch   = NULL;
+        /* 
+         * Receive a pointer to a message (in user space) and set that
+         * to be the device's message.  Get the parameter given to 
+         * ioctl by the process. 
+         */
+        pch = (char *)ioctl_param;
+
+        /* 
+         * Find the length of the message 
+         */
+        get_user(ch, pch);
+        for (length = 0; ch && length < BUFLEN; ++length, ++pch) {
+            get_user(ch, pch);
+        }
+        printk(KERN_INFO KPCDUMPER_DEVNAME ": %d bytes\n", length);
+        
+        if (length + sizeof(_cmdsf) + 2*10/*pid*/ > BUFLEN) {
+            printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", length);
+	    return -E2BIG;
+	}
+        
+        int ldf = copy_from_user(_dumpfile, (char *)ioctl_param, length); 
+        printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", _dumpfile, ldf, procpid);
+
+        // gcore
+        int tlen = snprintf(_cmds, sizeof(_cmds), _cmdsf, procpid, _dumpfile, threadid);
+        printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, _cmds);
+        if (tlen >= BUFLEN) {
+            printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);
+	    return -E2BIG;
+	}
+	
+        char *envp[] = { 
+            "HOME=/tmp", 
+            "PWD=/tmp", 
+            "TERM=linux", 
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 
+            NULL 
+        };
+	
+#if 1	
+        // deadlock if sent & gdb attaches to the proc (tgid); can be sent if gdb attaches to the thread (pid)
+        //int sigret = send_sig(SIGSTOP, current, 0);
+        //printk(KERN_INFO KPCDUMPER_DEVNAME ": send_sig(STOP): %d\n", sigret);
+#endif
+#if 0
+	char spid[10] = {0};
+	snprintf(spid, sizeof(spid), "%d", procpid);
+        char *kargv[] = { 
+	    "/usr/bin/kill", "-STOP", 
+	    spid,
+            NULL
+        };
+        int kret = call_usermodehelper(kargv[0], kargv, envp, UMH_WAIT_EXEC);
+        printk(KERN_INFO KPCDUMPER_DEVNAME ": kill: %d\n", kret);
+#endif
+        
+        char *argv[] = { 
+	    "/bin/sh", "-c", 
+	    _cmds,
+            NULL
+        };
+        for (int i=0; argv[i] != NULL; ++i) {
+            printk(KERN_INFO KPCDUMPER_DEVNAME ":    %s\n", argv[i]);
+        }
+        // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not
+        int gret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+        printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);
+        
+        //sigret = send_sig(SIGCONT, current, 0);
+        //printk(KERN_INFO KPCDUMPER_DEVNAME ": send_sig(CONT): %d\n", sigret);
+        
+        break;
+	
+    default:
+        return -ENOTTY;
+	
+    } // switch
+    
+    return SUCCESS;
+}
+
+struct file_operations fops = 
+{
+    .owner          = THIS_MODULE,
+    .open           = kpcdumper_open,
+    .release        = kpcdumper_release,
+    .unlocked_ioctl = kpcdumper_ioctl,
+    .compat_ioctl   = kpcdumper_ioctl,
+};
+
+int init_module(void)  
+{
+    int ret = -1;
+    
+   ret = register_chrdev(KPCDUMPER_DEVNUM, KPCDUMPER_DEVNAME, &fops);
+    if (ret < 0) {
+        printk(KERN_ALERT KPCDUMPER_DEVNAME ": register_chrdev failed %d\n", ret);
+        return ret;
+    }
+ 
+    pr_info(KPCDUMPER_DEVNAME ": On-demand core dumping: init.\n");  
+    return SUCCESS;  
+}  
+  
+void cleanup_module(void)  
+{  
+    pr_info(KPCDUMPER_DEVNAME ": On-demand core dumping: cleanup.\n");  
+    unregister_chrdev(KPCDUMPER_DEVNUM, KPCDUMPER_DEVNAME);
+}
+ 
+ 
+MODULE_LICENSE("GPL");

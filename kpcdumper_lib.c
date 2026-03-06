@@ -38,14 +38,14 @@ void dump_core(const char* corefile, const char* devname)
 
     struct sigaction satrap = { 
         .sa_handler = dumpdone_handler,
-	//.sa_flags   = SA_RESETHAND
+        //.sa_flags   = SA_RESETHAND
     };
     sigaction(SIGDUMPDONE, &satrap, NULL);
     
     
     while (true == atomic_load(&_dumpdone)) {
         //printf("Waiting in %s...\n", corefile);
-	usleep(1000*100L);
+    i   usleep(1000*100L);
     } 
     //printf("Dumping %s\n", corefile);
     
@@ -63,7 +63,7 @@ void dump_core(const char* corefile, const char* devname)
 
     while (false == atomic_load(&_dumpdone)) {
         //printf("Waiting out %s...\n", corefile);
-	usleep(1000*100L);
+        usleep(1000*100L);
     } 
     atomic_store(&_dumpdone, false);
 

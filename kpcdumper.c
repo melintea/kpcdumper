@@ -117,8 +117,8 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         
         if (length + sizeof(_cmdsf) + 2*10/*pid*/ > BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", length);
-	    return -E2BIG;
-	}
+        return -E2BIG;
+    }
         
         int ldf = copy_from_user(_dumpfile, (char *)ioctl_param, length); 
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", _dumpfile, ldf, procpid);
@@ -128,20 +128,20 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, _cmds);
         if (tlen >= BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);
-	    return -E2BIG;
-	}
-	
-#if 1	
+        return -E2BIG;
+    }
+    
+#if 1    
         // deadlock if sent & gdb attaches to the proc (tgid); can be sent if gdb attaches to the thread (pid)
         //int sigret = send_sig(SIGSTOP, current, 0);
         //printk(KERN_INFO KPCDUMPER_DEVNAME ": send_sig(STOP): %d\n", sigret);
 #endif
 #if 0
-	char spid[10] = {0};
-	snprintf(spid, sizeof(spid), "%d", procpid);
+    char spid[10] = {0};
+    snprintf(spid, sizeof(spid), "%d", procpid);
         char *kargv[] = { 
-	    "/usr/bin/kill", "-STOP", 
-	    spid,
+        "/usr/bin/kill", "-STOP", 
+        spid,
             NULL
         };
         int kret = call_usermodehelper(kargv[0], kargv, _envp, UMH_WAIT_EXEC);
@@ -149,8 +149,8 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
 #endif
         
         char *argv[] = { 
-	    "/bin/sh", "-c", 
-	    _cmds,
+        "/bin/sh", "-c", 
+        _cmds,
             NULL
         };
         for (int i=0; argv[i] != NULL; ++i) {
@@ -164,10 +164,10 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         //printk(KERN_INFO KPCDUMPER_DEVNAME ": send_sig(CONT): %d\n", sigret);
         
         break;
-	
+    
     default:
         return -ENOTTY;
-	
+    
     } // switch
     
     return SUCCESS;

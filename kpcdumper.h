@@ -15,7 +15,7 @@ extern "C" {
 #define KPCDUMPER_DEVNUM  (137)            // ditto   //TODO: dynamic
 #define SIGDUMPDONE       SIGUSR1          // signal.h
 #define KPCDUMPER_HOME    "/tmp"
-#define GDB               "/usr/bin/gdb"
+#define GDB               "/usr/bin/gdb"   // "/opt/gdb163/bin/gdb"
 
 #define IOCTL_SET_MSG   _IOW(KPCDUMPER_DEVNUM, 1, char*) // Userspace writes to kernel
 #define IOCTL_GET_MSG   _IOR(KPCDUMPER_DEVNUM, 2, char*) // Userspace reads from kernel

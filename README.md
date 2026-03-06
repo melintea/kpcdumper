@@ -21,7 +21,7 @@ Usage:
 
 - The thread calling ```dump_core``` will wait until the dump completes.
   Other threads in the application will continue running until gdb attaches. 
-- YMMV with a different kernel.
+- YMMV with different kernel versions.
 - Secure Boot, ```selinux``` and such might interfere with.
 
 ## Similar tools & various links

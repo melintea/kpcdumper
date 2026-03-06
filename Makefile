@@ -16,10 +16,10 @@ module:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules 
 	modinfo $(MODULE).ko
 
-libkpcdumper.a: kpcdumper_lib.o
+libkpcdumper.a: libkpcdumper.o
 	ar rcs $@ $^
 	
-kpcdumper_lib.o: kpcdumper_lib.c
+libkpcdumper.o: libkpcdumper.c
 	gcc -c -Wall -ggdb $<
 
 #TODO: dep on libkpcdumper.a

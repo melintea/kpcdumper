@@ -126,8 +126,6 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", 
                _dumpfile, ldf, procpid);
 
-        send_sig(SIGSTOP, current, 0);
-
         // gcore                                          attach   core       SIGCONT  SIGDUMPDONE
         int tlen = snprintf(_cmds, sizeof(_cmds), _cmdsf, procpid, _dumpfile, procpid, threadid);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, _cmds);
@@ -144,6 +142,9 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         for (int i=0; argv[i] != NULL; ++i) {
             printk(KERN_INFO KPCDUMPER_DEVNAME ":    %s\n", argv[i]);
         }
+	
+        send_sig(SIGSTOP, current, 0);
+	
         // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not
         int gret = call_usermodehelper(argv[0], argv, _envp, UMH_WAIT_EXEC);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);

@@ -101,6 +101,10 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         int  length = 0;
         char ch;
         char *pch   = NULL;
+
+	// return or _cmds must deliver a SIGCONT
+        send_sig(SIGSTOP, current, 0);
+	
         /* 
          * Receive a pointer to a message (in user space) and set that
          * to be the device's message.  Get the parameter given to 
@@ -119,6 +123,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         
         if (length + sizeof(g_cmdsf) + 2*10/*pid*/ > BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", length);
+            send_sig(SIGCONT, current, 0);
             return -E2BIG;
         }
         
@@ -131,6 +136,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, g_cmds);
         if (tlen >= BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);
+            send_sig(SIGCONT, current, 0);
             return -E2BIG;
         }
     
@@ -142,9 +148,6 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         for (int i=0; argv[i] != NULL; ++i) {
             printk(KERN_INFO KPCDUMPER_DEVNAME ":    %s\n", argv[i]);
         }
-	
-	// _cmds must deliver a SIGCONT
-        send_sig(SIGSTOP, current, 0);
 	
         // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not
         int gret = call_usermodehelper(argv[0], argv, g_envp, UMH_WAIT_EXEC);

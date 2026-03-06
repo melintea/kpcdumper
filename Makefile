@@ -10,7 +10,7 @@ obj-m += $(MODULE).o
    
 PWD := $(CURDIR)  
    
-all: module libkpcdumper.a appdump
+all: module libkpcdumper.a testapp
 
 module: 
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules 
@@ -23,16 +23,16 @@ libkpcdumper.o: libkpcdumper.c
 	gcc -c -Wall -ggdb $<
 
 #TODO: dep on libkpcdumper.a
-appdump: appdump.cpp
+testapp: testapp.cpp
 	g++ -c -Wall -ggdb $<
-	g++ appdump.o -L. -Wl,-Bstatic -lkpcdumper -Wl,-Bdynamic -Wall -O0 -o $@
+	g++ testapp.o -L. -Wl,-Bstatic -lkpcdumper -Wl,-Bdynamic -Wall -O0 -o $@
 
 test: all
 	-sudo rmmod $(MODULE).ko
 	sudo insmod $(MODULE).ko
 	lsmod | grep $(MODULE)
 	sudo mknod -m 666 $(MODULE) c $(DEVNUM) 1
-	./appdump
+	./testapp
 	sudo rm $(MODULE) 
 	test -f /tmp/kpc1.core && test -f /tmp/kpc2.core && test -f /tmp/kpc3.core && test -f /tmp/kpc4.core && test -f /tmp/kpc5.core
 	sudo dmesg --time-format delta | grep $(MODULE) 
@@ -42,7 +42,7 @@ test: all
 clean: 
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
 	-rm *.o a.out 
-	-rm appdump
+	-rm testapp
 	-rm libkpcdumper.a 
 	-sudo rmmod $(MODULE).ko
 	-sudo rm $(MODULE)

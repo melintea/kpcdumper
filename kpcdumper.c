@@ -5,6 +5,7 @@
 #include "kpcdumper.h"
 
 #include <asm/uaccess.h>
+#include <asm/signal.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -15,6 +16,8 @@
 #include <linux/spinlock.h>
 #include <linux/string.h>
 
+#define STR(x)   #x
+#define TOSTR(x) STR(x)
 
 #ifdef BUFLEN
 #  error BUFLEN already defined
@@ -29,8 +32,8 @@
 
 
 static const char  _cmdsf[] = 
-    "/usr/bin/gdb " 
-       "--cd=/tmp "
+    GDB" " 
+       "--cd="KPCDUMPER_HOME" "
        "--nx --batch --readnever "
        "-ex 'set logging enabled on' " 
        "-ex 'set startup-with-shell off' "
@@ -41,8 +44,15 @@ static const char  _cmdsf[] =
        "-ex 'set debug lin-lwp 1' "
        "-ex 'attach %d' -ex 'gcore %s' " 
        "-ex detach -ex quit "
-   "; /usr/bin/kill -USR1 %d "
+   "; /usr/bin/kill -"TOSTR(SIGDUMPDONE) " %d "
    ;
+static char *_envp[] = { 
+    "HOME="KPCDUMPER_HOME, 
+    "PWD="KPCDUMPER_HOME, 
+    "TERM=linux", 
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 
+    NULL 
+};
 
 static DEFINE_MUTEX(_kpcdumper_lock);
 static char _cmds[BUFLEN+1]     = {0};
@@ -121,14 +131,6 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
 	    return -E2BIG;
 	}
 	
-        char *envp[] = { 
-            "HOME=/tmp", 
-            "PWD=/tmp", 
-            "TERM=linux", 
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 
-            NULL 
-        };
-	
 #if 1	
         // deadlock if sent & gdb attaches to the proc (tgid); can be sent if gdb attaches to the thread (pid)
         //int sigret = send_sig(SIGSTOP, current, 0);
@@ -142,7 +144,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
 	    spid,
             NULL
         };
-        int kret = call_usermodehelper(kargv[0], kargv, envp, UMH_WAIT_EXEC);
+        int kret = call_usermodehelper(kargv[0], kargv, _envp, UMH_WAIT_EXEC);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": kill: %d\n", kret);
 #endif
         
@@ -155,7 +157,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
             printk(KERN_INFO KPCDUMPER_DEVNAME ":    %s\n", argv[i]);
         }
         // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not
-        int gret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+        int gret = call_usermodehelper(argv[0], argv, _envp, UMH_WAIT_EXEC);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);
         
         //sigret = send_sig(SIGCONT, current, 0);

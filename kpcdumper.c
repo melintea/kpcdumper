@@ -149,7 +149,6 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         int gret = call_usermodehelper(argv[0], argv, _envp, UMH_WAIT_EXEC);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);
         
-        
         break;
     
     default:

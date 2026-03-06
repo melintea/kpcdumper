@@ -45,6 +45,7 @@ static const char  _cmdsf[] =
        "-ex 'set debug lin-lwp 1' "
        "-ex 'attach %d' -ex 'gcore %s' " 
        "-ex detach -ex quit "
+   "; /usr/bin/kill -CONT %d "
    "; /usr/bin/kill -"TOSTR(SIGDUMPDONE) " %d "
    ;
 static char *_envp[] = { 
@@ -125,8 +126,10 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", 
                _dumpfile, ldf, procpid);
 
+        send_sig(SIGSTOP, current, 0);
+
         // gcore
-        int tlen = snprintf(_cmds, sizeof(_cmds), _cmdsf, procpid, _dumpfile, threadid);
+        int tlen = snprintf(_cmds, sizeof(_cmds), _cmdsf, procpid, _dumpfile, procpid, threadid);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, _cmds);
         if (tlen >= BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);

@@ -143,6 +143,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
             printk(KERN_INFO KPCDUMPER_DEVNAME ":    %s\n", argv[i]);
         }
 	
+	// _cmds must deliver a SIGCONT
         send_sig(SIGSTOP, current, 0);
 	
         // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not

@@ -128,7 +128,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
 
         send_sig(SIGSTOP, current, 0);
 
-        // gcore
+        // gcore                                          attach   core       SIGCONT  SIGDUMPDONE
         int tlen = snprintf(_cmds, sizeof(_cmds), _cmdsf, procpid, _dumpfile, procpid, threadid);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, _cmds);
         if (tlen >= BUFLEN) {

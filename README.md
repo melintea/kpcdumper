@@ -18,6 +18,8 @@ Usage:
 
 ## Caveats
 
+- The thread calling ```dump_core``` will wait until the dump completes.
+  Other threads in the application will continue running until gdb attaches. 
 - YMMV with a different kernel.
 - Secure Boot, ```selinux``` and such might interfere with.
 

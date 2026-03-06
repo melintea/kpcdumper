@@ -3,7 +3,7 @@
 It consist of a kernel module which will run ```gdb gcore``` on demand from the application.
 
 Usage:
-- make
+- build
 - insert the kernel module
 - create the dump device
 - link the app with the static library
@@ -13,8 +13,9 @@ Usage:
 
 ## Build
 
-- change the makefile and the header as needed
-- make
+- Needs a C11 compiler
+- Change the makefile and the header as needed
+- ```make```
 
 ## Caveats
 

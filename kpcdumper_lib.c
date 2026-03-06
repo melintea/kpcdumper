@@ -45,7 +45,7 @@ void dump_core(const char* corefile, const char* devname)
     
     while (true == atomic_load(&_dumpdone)) {
         //printf("Waiting in %s...\n", corefile);
-    i   usleep(1000*100L);
+        usleep(1000*100L);
     } 
     //printf("Dumping %s\n", corefile);
     

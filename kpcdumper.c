@@ -98,13 +98,13 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
     
     switch(ioctl_num) {
     case IOCTL_SET_MSG:
+	// return or _cmds must deliver a SIGCONT
+        send_sig(SIGSTOP, current, 0);
+	
         int  length = 0;
         char ch;
         char *pch   = NULL;
 
-	// return or _cmds must deliver a SIGCONT
-        send_sig(SIGSTOP, current, 0);
-	
         /* 
          * Receive a pointer to a message (in user space) and set that
          * to be the device's message.  Get the parameter given to 

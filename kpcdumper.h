@@ -8,8 +8,6 @@
 extern "C" {
 #endif
 
-#include <linux/ioctl.h>
-
 
 #define KPCDUMPER_DEVNAME "kpcdumper"      // keep in sync with header
 #define KPCDUMPER_DEVNUM  (137)            // ditto   //TODO: dynamic

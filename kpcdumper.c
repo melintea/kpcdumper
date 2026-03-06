@@ -8,6 +8,7 @@
 #include <asm/signal.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/ioctl.h>
 #include <linux/kernel.h>
 #include <linux/kmod.h>
 #include <linux/module.h>

@@ -36,6 +36,7 @@ test: all
 	sudo rm $(MODULE) 
 	test -f /tmp/kpc1.core && test -f /tmp/kpc2.core && test -f /tmp/kpc3.core && test -f /tmp/kpc4.core && test -f /tmp/kpc5.core
 	sudo dmesg --time-format delta | grep $(MODULE) 
+	@echo "=== Pass ==="
 
 .PHONY: clean  
 clean: 

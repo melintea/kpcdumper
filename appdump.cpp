@@ -16,14 +16,14 @@
 void func2(const char* corefile, const char* devname)
 {
     dump_core(corefile, devname);
-    ::printf("Dumped '%s'?\n", corefile);
+    //::printf("Dumped '%s'?\n", corefile);
 }
 
 void func1(const char* corefile, const char* devname)
 {
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    //std::this_thread::sleep_for(std::chrono::milliseconds(200));
     func2(corefile, devname);
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    //std::this_thread::sleep_for(std::chrono::milliseconds(200));
 }
 
 int main(int argc, char** argv) 

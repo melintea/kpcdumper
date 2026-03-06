@@ -5,7 +5,10 @@
 #include "kpcdumper.h"
 
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
+#include <vector>
 
 #include <cstdio>
 #include <cstdlib>
@@ -13,8 +16,18 @@
 #include <unistd.h>
 
 
+std::mutex               g_mtxStart;
+std::condition_variable  g_cvStart;
+bool                     g_startFlag = false;
+
+
 void func2(const char* corefile, const char* devname)
 {
+    {
+        std::unique_lock<std::mutex> lock(g_mtxStart);
+        g_cvStart.wait(lock, []{return g_startFlag;});
+    }
+    
     dump_core(corefile, devname);
     //::printf("Dumped '%s'?\n", corefile);
 }
@@ -30,18 +43,22 @@ int main(int argc, char** argv)
 {
     ::printf("%s: PID %d\n", argv[0], getpid());
 
+    std::vector<std::thread> threads;
+    threads.emplace_back(func1, "./kpc1.core",  "./" KPCDUMPER_DEVNAME);
+    threads.emplace_back(func1, "./kpc2.core",  "./" KPCDUMPER_DEVNAME);
+    threads.emplace_back(func1, "./kpc3.core",  "./" KPCDUMPER_DEVNAME);
+    threads.emplace_back(func1, "./kpc4.core",  "./" KPCDUMPER_DEVNAME);
+    threads.emplace_back(func1, "./kpc5.core",  "./" KPCDUMPER_DEVNAME);
 
-    std::thread t1(func1, "./kpc1.core",  "./" KPCDUMPER_DEVNAME);
-    std::thread t2(func1, "./kpc2.core",  "./" KPCDUMPER_DEVNAME);
-    std::thread t3(func1, "./kpc3.core",  "./" KPCDUMPER_DEVNAME);
-    std::thread t4(func1, "./kpc4.core",  "./" KPCDUMPER_DEVNAME);
-    std::thread t5(func1, "./kpc5.core",  "./" KPCDUMPER_DEVNAME);
+    {
+        std::unique_lock<std::mutex> lock(g_mtxStart);
+	g_startFlag = true;
+        g_cvStart.notify_all();
+    }
     
-    t1.join();
-    t2.join();
-    t3.join();
-    t4.join();
-    t5.join();
+    for (auto& t: threads) {
+        t.join();
+    }
 
     ::printf("Done: %s: PID %d\n", argv[0], getpid());
     return 0;

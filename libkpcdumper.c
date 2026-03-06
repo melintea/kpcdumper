@@ -19,21 +19,21 @@
 
 
 // TODO: sig_atomic_t?
-static atomic_bool _dumpdone = ATOMIC_VAR_INIT(false);
-static mtx_t       _dumping;
+static atomic_bool g_dumpdone = ATOMIC_VAR_INIT(false);
+static mtx_t       g_dumping;
 
 void dumpdone_handler(int sig)
 {
     //printf("Signal %d\n", sig);
-    bool old = atomic_load(&_dumpdone);
+    bool old = atomic_load(&g_dumpdone);
     assert(old == false);
-    atomic_store(&_dumpdone, true);
+    atomic_store(&g_dumpdone, true);
 }
 
 void dump_core(const char* corefile, const char* devname)
 {
 
-    int mret = mtx_lock(&_dumping);
+    int mret = mtx_lock(&g_dumping);
     assert(mret == thrd_success);
 
     struct sigaction satrap = { 
@@ -43,7 +43,7 @@ void dump_core(const char* corefile, const char* devname)
     sigaction(SIGDUMPDONE, &satrap, NULL);
     
     
-    while (true == atomic_load(&_dumpdone)) {
+    while (true == atomic_load(&g_dumpdone)) {
         //printf("Waiting in %s...\n", corefile);
         usleep(1000*10L);
     } 
@@ -61,13 +61,13 @@ void dump_core(const char* corefile, const char* devname)
     close(fd);
     
 
-    while (false == atomic_load(&_dumpdone)) {
+    while (false == atomic_load(&g_dumpdone)) {
         //printf("Waiting out %s...\n", corefile);
         usleep(1000*10L);
     } 
-    atomic_store(&_dumpdone, false);
+    atomic_store(&g_dumpdone, false);
 
-    mret = mtx_unlock(&_dumping);
+    mret = mtx_unlock(&g_dumping);
     assert(mret == thrd_success);
 
 }

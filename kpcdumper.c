@@ -32,7 +32,7 @@
 #define SUCCESS (0) 
 
 
-static const char  _cmdsf[] = 
+static const char  g_cmdsf[] = 
     GDB" " 
        "--cd="KPCDUMPER_HOME" "
        "--nx --batch --readnever "
@@ -48,7 +48,7 @@ static const char  _cmdsf[] =
    "; /usr/bin/kill -CONT %d "
    "; /usr/bin/kill -"TOSTR(SIGDUMPDONE) " %d "
    ;
-static char *_envp[] = { 
+static char *g_envp[] = { 
     "HOME="KPCDUMPER_HOME, 
     "PWD="KPCDUMPER_HOME, 
     "TERM=linux", 
@@ -56,9 +56,9 @@ static char *_envp[] = {
     NULL 
 };
 
-static DEFINE_MUTEX(_kpcdumper_lock);
-static char _cmds[BUFLEN+1]     = {0};
-static char _dumpfile[BUFLEN+1] = {0};
+static DEFINE_MUTEX(g_kpcdumper_lock);
+static char g_cmds[BUFLEN+1]     = {0};
+static char g_dumpfile[BUFLEN+1] = {0};
 
 /* 
  * This is called whenever a process attempts to open the device file 
@@ -68,7 +68,7 @@ kpcdumper_open(struct inode *inode, struct file *file)
 {
     printk(KERN_INFO KPCDUMPER_DEVNAME ": device_open(%p)\n", file);
 
-    mutex_lock(&_kpcdumper_lock);
+    mutex_lock(&g_kpcdumper_lock);
     
     try_module_get(THIS_MODULE);
     return SUCCESS;
@@ -79,7 +79,7 @@ kpcdumper_release(struct inode *inode, struct file *file)
 {
     printk(KERN_INFO KPCDUMPER_DEVNAME ": device_release(%p,%p)\n", inode, file);
 
-    mutex_unlock(&_kpcdumper_lock);
+    mutex_unlock(&g_kpcdumper_lock);
 
     module_put(THIS_MODULE);
     return SUCCESS;
@@ -117,18 +117,18 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         }
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d bytes\n", length);
         
-        if (length + sizeof(_cmdsf) + 2*10/*pid*/ > BUFLEN) {
+        if (length + sizeof(g_cmdsf) + 2*10/*pid*/ > BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", length);
             return -E2BIG;
         }
         
-        int ldf = copy_from_user(_dumpfile, (char *)ioctl_param, length); 
+        int ldf = copy_from_user(g_dumpfile, (char *)ioctl_param, length); 
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", 
-               _dumpfile, ldf, procpid);
+               g_dumpfile, ldf, procpid);
 
-        // gcore                                          attach   core       SIGCONT  SIGDUMPDONE
-        int tlen = snprintf(_cmds, sizeof(_cmds), _cmdsf, procpid, _dumpfile, procpid, threadid);
-        printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, _cmds);
+        // gcore                                             attach   core        SIGCONT  SIGDUMPDONE
+        int tlen = snprintf(g_cmds, sizeof(g_cmds), g_cmdsf, procpid, g_dumpfile, procpid, threadid);
+        printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, g_cmds);
         if (tlen >= BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);
             return -E2BIG;
@@ -136,7 +136,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
     
         char *argv[] = { 
         "/bin/sh", "-c", 
-            _cmds,
+            g_cmds,
             NULL
         };
         for (int i=0; argv[i] != NULL; ++i) {
@@ -147,7 +147,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         send_sig(SIGSTOP, current, 0);
 	
         // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not
-        int gret = call_usermodehelper(argv[0], argv, _envp, UMH_WAIT_EXEC);
+        int gret = call_usermodehelper(argv[0], argv, g_envp, UMH_WAIT_EXEC);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);
         
         break;

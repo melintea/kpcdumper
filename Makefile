@@ -37,7 +37,7 @@ test: all
 	test -f /tmp/kpc1.core && test -f /tmp/kpc2.core && test -f /tmp/kpc3.core && test -f /tmp/kpc4.core && test -f /tmp/kpc5.core
 	sudo dmesg --time-format delta | grep $(MODULE) 
 	ls -l /tmp/*.core /tmp/gdb*
-	@echo "=== Pass ==="
+	@echo "\e[32m=== Pass ===\e[0m"
 
 .PHONY: clean  
 clean: 

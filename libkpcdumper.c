@@ -36,19 +36,18 @@ void dump_core(const char* corefile, const char* devname)
     int mret = mtx_lock(&g_dumping);
     assert(mret == thrd_success);
 
-    struct sigaction satrap = { 
-        .sa_handler = dumpdone_handler,
-        //.sa_flags   = SA_RESETHAND
-    };
-    sigaction(SIGDUMPDONE, &satrap, NULL);
-    
     
     while (true == atomic_load(&g_dumpdone)) {
         //printf("Waiting in %s...\n", corefile);
         usleep(1000*10L);
     } 
     //printf("Dumping %s\n", corefile);
-    
+   
+    struct sigaction satrap = { 
+        .sa_handler = dumpdone_handler,
+        .sa_flags   = SA_RESETHAND
+    };
+    sigaction(SIGDUMPDONE, &satrap, NULL);
     
     int fd = open(devname, O_RDWR);
     if (fd < 0) {

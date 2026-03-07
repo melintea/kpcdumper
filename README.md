@@ -20,8 +20,8 @@ Usage:
 ## Caveats
 
 - The thread calling ```dump_core``` will wait until the dump completes.
-  Other threads in the application will continue running for a few jiffies after the call
-  until the module SIGSTOPs the program. 
+  Other threads in the application will continue running for a few jiffies 
+  after that call is entered, until the module SIGSTOPs the program. 
 - YMMV with different kernel versions.
 - Secure Boot, ```selinux``` and such might interfere with.
 

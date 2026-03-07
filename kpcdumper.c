@@ -132,11 +132,11 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
 
         // gcore 
         int tlen = snprintf(g_cmds, sizeof(g_cmds), 
-                        g_cmdsfmt, 
-                procpid,     // attach
-                g_dumpfile,  // core file
-                procpid,     // SIGCONT
-                procpid);    // SIGDUMPDONE
+                            g_cmdsfmt, 
+                            procpid,     // attach
+                            g_dumpfile,  // core file
+                            procpid,     // SIGCONT
+                            procpid);    // SIGDUMPDONE
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, g_cmds);
         if (tlen >= BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);

@@ -32,7 +32,7 @@
 #define SUCCESS (0) 
 
 
-static const char  g_cmdsf[] = 
+static const char  g_cmdsfmt[] = 
     GDB" " 
        "--cd="KPCDUMPER_HOME" "
        "--nx --batch --readnever "
@@ -94,13 +94,12 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
     printk(KERN_INFO KPCDUMPER_DEVNAME ": kpcdumper_ioctl\n");
     
     pid_t procpid  = current->tgid;
-    pid_t threadid = current->pid;
     
     switch(ioctl_num) {
     case IOCTL_SET_MSG:
-	// return or _cmds must deliver a SIGCONT
+    // return or g_cmds must deliver a SIGCONT
         send_sig(SIGSTOP, current, 0);
-	
+    
         int  length = 0;
         char ch;
         char *pch   = NULL;
@@ -121,7 +120,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         }
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d bytes\n", length);
         
-        if (length + sizeof(g_cmdsf) + 2*10/*pid*/ > BUFLEN) {
+        if (length + sizeof(g_cmdsfmt) + 2*10/*pid*/ > BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", length);
             send_sig(SIGCONT, current, 0);
             return -E2BIG;
@@ -131,8 +130,13 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", 
                g_dumpfile, ldf, procpid);
 
-        // gcore                                             attach   core        SIGCONT  SIGDUMPDONE
-        int tlen = snprintf(g_cmds, sizeof(g_cmds), g_cmdsf, procpid, g_dumpfile, procpid, threadid);
+        // gcore 
+        int tlen = snprintf(g_cmds, sizeof(g_cmds), 
+                        g_cmdsfmt, 
+                procpid,     // attach
+                g_dumpfile,  // core file
+                procpid,     // SIGCONT
+                procpid);    // SIGDUMPDONE
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, g_cmds);
         if (tlen >= BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);
@@ -141,14 +145,14 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         }
     
         char *argv[] = { 
-        "/bin/sh", "-c", 
+            "/bin/sh", "-c", 
             g_cmds,
             NULL
         };
         for (int i=0; argv[i] != NULL; ++i) {
             printk(KERN_INFO KPCDUMPER_DEVNAME ":    %s\n", argv[i]);
         }
-	
+    
         // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not
         int gret = call_usermodehelper(argv[0], argv, g_envp, UMH_WAIT_EXEC);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);

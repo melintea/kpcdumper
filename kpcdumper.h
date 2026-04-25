@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 
-#define KPCDUMPER_DEVNAME "kpcdumper"      // keep in sync with header
+#define KPCDUMPER_DEVNAME "kpcdumper"      // keep in sync with the Makefile
 #define KPCDUMPER_DEVNUM  (137)            // ditto   //TODO: dynamic
 #define SIGDUMPDONE       SIGUSR1          // signal.h
 #define KPCDUMPER_HOME    "/tmp"
@@ -21,6 +21,7 @@ extern "C" {
 
 /*
  * Example: dump_core( "foo.core", "/dev/"KPCDUMPER_DEVNAME );
+ * If corefile is a relative path, it is relative to KPCDUMPER_HOME.
  */
 void dump_core(const char* corefile, const char* devname);
 

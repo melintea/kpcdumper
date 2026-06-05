@@ -5,6 +5,7 @@
 # keep in sync with header
 MODULE = kpcdumper
 DEVNUM = 137
+#CONFIG_MODULE_SIG=n
 
 obj-m += $(MODULE).o
    

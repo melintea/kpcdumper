@@ -24,6 +24,7 @@ Usage:
   after that call is entered, until the module SIGSTOPs the program. 
 - YMMV with different kernel versions.
 - Secure Boot, ```selinux``` and such might interfere with.
+  - [signmod](https://github.com/cipherswami/signmod) may or may not help
 
 ## Similar tools & various links
 

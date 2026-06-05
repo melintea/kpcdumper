@@ -198,3 +198,4 @@ void cleanup_module(void)
  
  
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Aurelian Melinte <ame01 at gmx dot net>");

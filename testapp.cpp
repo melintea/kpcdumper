@@ -21,21 +21,21 @@ std::condition_variable  g_cvStart;
 bool                     g_startFlag = false;
 
 
-void func2(const char* corefile, const char* devname)
+void func2(const char* corefile)
 {
     {
         std::unique_lock<std::mutex> lock(g_mtxStart);
         g_cvStart.wait(lock, []{return g_startFlag;});
     }
     
-    dump_core(corefile, devname);
+    dump_core(corefile);
     //::printf("Dumped '%s'?\n", corefile);
 }
 
-void func1(const char* corefile, const char* devname)
+void func1(const char* corefile)
 {
     //std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    func2(corefile, devname);
+    func2(corefile);
     //std::this_thread::sleep_for(std::chrono::milliseconds(200));
 }
 
@@ -44,11 +44,11 @@ int main(int argc, char** argv)
     ::printf("%s: PID %d\n", argv[0], getpid());
 
     std::vector<std::thread> threads;
-    threads.emplace_back(func1, "./kpc1.core",  "./" KPCDUMPER_DEVNAME);
-    threads.emplace_back(func1, "./kpc2.core",  "./" KPCDUMPER_DEVNAME);
-    threads.emplace_back(func1, "./kpc3.core",  "./" KPCDUMPER_DEVNAME);
-    threads.emplace_back(func1, "./kpc4.core",  "./" KPCDUMPER_DEVNAME);
-    threads.emplace_back(func1, "./kpc5.core",  "./" KPCDUMPER_DEVNAME);
+    threads.emplace_back(func1, "./kpc1.core");
+    threads.emplace_back(func1, "./kpc2.core");
+    threads.emplace_back(func1, "./kpc3.core");
+    threads.emplace_back(func1, "./kpc4.core");
+    threads.emplace_back(func1, "./kpc5.core");
 
     {
         std::unique_lock<std::mutex> lock(g_mtxStart);

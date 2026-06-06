@@ -2,9 +2,8 @@
 #
 #
 
-# keep in sync with header
+# keep in sync with kpcdumper .h 
 MODULE = kpcdumper
-DEVNUM = 137
 #CONFIG_MODULE_SIG=n
 
 obj-m += $(MODULE).o
@@ -32,12 +31,11 @@ test: all
 	-sudo rmmod $(MODULE).ko
 	sudo insmod $(MODULE).ko
 	lsmod | grep $(MODULE)
-	sudo mknod -m 666 $(MODULE) c $(DEVNUM) 1
+	ls -l /dev/$(MODULE)
 	./testapp
-	sudo rm $(MODULE) 
-	test -f /tmp/kpc1.core && test -f /tmp/kpc2.core && test -f /tmp/kpc3.core && test -f /tmp/kpc4.core && test -f /tmp/kpc5.core
 	sudo dmesg --time-format delta | grep $(MODULE) 
-	ls -l /tmp/*.core /tmp/gdb*
+	-ls -l /tmp/*.core /tmp/gdb*
+	test -f /tmp/kpc1.core && test -f /tmp/kpc2.core && test -f /tmp/kpc3.core && test -f /tmp/kpc4.core && test -f /tmp/kpc5.core
 	@echo "\e[32m=== Pass ===\e[0m"
 
 .PHONY: clean  
@@ -47,5 +45,4 @@ clean:
 	-rm testapp
 	-rm libkpcdumper.a 
 	-sudo rmmod $(MODULE).ko
-	-sudo rm $(MODULE)
 	-sudo rm /tmp/gdb.log /tmp/*.core

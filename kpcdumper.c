@@ -4,8 +4,10 @@
 
 #include "kpcdumper.h"
 
-#include <asm/uaccess.h>
 #include <asm/signal.h>
+#include <linux/cdev.h>
+#include <linux/device.h>
+#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/ioctl.h>
@@ -16,6 +18,7 @@
 #include <linux/printk.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <linux/uaccess.h>
 
 #define STR(x)   #x
 #define TOSTR(x) STR(x)
@@ -55,6 +58,12 @@ static char *g_envp[] = {
     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 
     NULL 
 };
+
+static dev_t g_majnum;
+//static int g_majnum = 0; 
+static struct class*  g_class  = NULL;
+static struct device* g_device = NULL;
+static struct cdev    g_cdev;
 
 static DEFINE_MUTEX(g_kpcdumper_lock);
 static char g_cmds[BUFLEN+1]     = {0};
@@ -176,13 +185,56 @@ struct file_operations fops =
     .compat_ioctl   = kpcdumper_ioctl,
 };
 
-int init_module(void)  
+// Set access permissions
+static char* kpcdumper_devnode(const struct device *dev, umode_t *mode)
+{
+    if (mode != NULL) {
+        *mode = 0666;
+    }
+    return kasprintf(GFP_KERNEL, "%s", dev_name(dev));
+}
+
+static int __init kpcdumper_init(void)
 {
     int ret = -1;
     
-    ret = register_chrdev(KPCDUMPER_DEVNUM, KPCDUMPER_DEVNAME, &fops);
+    // Dynamically allocate a major number
+    ret = alloc_chrdev_region(&g_majnum, 0, 1, KPCDUMPER_DEVNAME);
     if (ret < 0) {
-        printk(KERN_ALERT KPCDUMPER_DEVNAME ": register_chrdev failed %d\n", ret);
+        printk(KERN_ALERT KPCDUMPER_DEVNAME ": Failed to register a major number %d\n", ret);
+        return ret;
+    }
+    pr_info(KPCDUMPER_DEVNAME ": number %d : %d\n", MAJOR(g_majnum), MINOR(g_majnum));
+
+    // Register the device class
+    g_class = class_create(/*THIS_MODULE,*/ KPCDUMPER_DEVNAME/*CLASS_NAME*/);
+    if (IS_ERR(g_class)) {
+        unregister_chrdev_region(g_majnum, 1);
+        printk(KERN_ALERT KPCDUMPER_DEVNAME ": Failed to register device class\n");
+        return PTR_ERR(g_class);
+    }
+    g_class->devnode = kpcdumper_devnode;
+    pr_info(KPCDUMPER_DEVNAME ": device class registered correctly\n");
+
+    // Register the device driver
+    g_device = device_create(g_class, NULL, g_majnum, NULL, KPCDUMPER_DEVNAME);
+    if (IS_ERR(g_device)) {
+        class_destroy(g_class);
+        unregister_chrdev_region(g_majnum, 1);
+        printk(KERN_ALERT KPCDUMPER_DEVNAME ": Failed to create the device\n");
+        return PTR_ERR(g_device);
+    }
+    pr_info(KPCDUMPER_DEVNAME ": device class created correctly\n");
+
+    // Initialize the cdev structure and add it to the kernel
+    cdev_init(&g_cdev, &fops);
+    g_cdev.owner = THIS_MODULE;
+    ret = cdev_add(&g_cdev, g_majnum, 1);
+    if (ret < 0) {
+        device_destroy(g_class, g_majnum);
+        class_destroy(g_class);
+        unregister_chrdev_region(g_majnum, 1);
+        printk(KERN_ALERT KPCDUMPER_DEVNAME ": Failed to add cdev %d\n", ret);
         return ret;
     }
  
@@ -190,12 +242,21 @@ int init_module(void)
     return SUCCESS;  
 }  
   
-void cleanup_module(void)  
+static void __exit kpcdumper_exit(void)
 {  
     pr_info(KPCDUMPER_DEVNAME ": On-demand core dumping: cleanup.\n");  
-    unregister_chrdev(KPCDUMPER_DEVNUM, KPCDUMPER_DEVNAME);
+    
+    cdev_del(&g_cdev);
+    device_destroy(g_class, g_majnum);
+    class_destroy(g_class);
+    unregister_chrdev_region(g_majnum, 1);
 }
  
  
+module_init(kpcdumper_init);
+module_exit(kpcdumper_exit);
+
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Aurelian Melinte <ame01 at gmx dot net>");
+MODULE_AUTHOR("Aurelian Melinte <ame01_at_gmx_dot_net>");
+MODULE_DESCRIPTION("On-demand process core dumping device");
+MODULE_VERSION("0.1");

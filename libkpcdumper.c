@@ -5,7 +5,9 @@
 #include "kpcdumper.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
+#include <string.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdatomic.h>
@@ -30,7 +32,7 @@ void dumpdone_handler(int sig)
     atomic_store(&g_dumpdone, true);
 }
 
-void dump_core(const char* corefile, const char* devname)
+void dump_core(const char* corefile)
 {
 
     int mret = mtx_lock(&g_dumping);
@@ -49,9 +51,10 @@ void dump_core(const char* corefile, const char* devname)
     };
     sigaction(SIGDUMPDONE, &satrap, NULL);
     
-    int fd = open(devname, O_RDWR);
+    static const char* kpcddev = "/dev/"KPCDUMPER_DEVNAME;
+    int fd = open(kpcddev, O_RDWR);
     if (fd < 0) {
-        //printf("open failed\n");
+        //printf("%s open failed %s\n", kpcddev, strerror(errno));
         abort(); // We still get the core...
     }
     

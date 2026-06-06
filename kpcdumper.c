@@ -26,6 +26,8 @@ MODULE_AUTHOR("Aurelian Melinte <ame01_at_gmx_dot_net>");
 MODULE_DESCRIPTION("On-demand process core dumping device");
 MODULE_VERSION("0.1");
 
+#define KPCDUMPER_DEVCLASS  KPCDUMPER_DEVNAME
+
 
 #define STR(x)   #x
 #define TOSTR(x) STR(x)
@@ -213,7 +215,7 @@ static int __init kpcdumper_init(void)
     pr_info(KPCDUMPER_DEVNAME ": number %d : %d\n", MAJOR(g_majnum), MINOR(g_majnum));
 
     // Register the device class
-    g_class = class_create(/*THIS_MODULE,*/ KPCDUMPER_DEVNAME/*CLASS_NAME*/);
+    g_class = class_create(/*THIS_MODULE,*/ KPCDUMPER_DEVCLASS);
     if (IS_ERR(g_class)) {
         unregister_chrdev_region(g_majnum, 1);
         printk(KERN_ALERT KPCDUMPER_DEVNAME ": Failed to register device class\n");

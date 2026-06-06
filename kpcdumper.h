@@ -22,6 +22,7 @@ extern "C" {
 /*
  * Example: dump_core( "foo.core" );
  * If corefile is a relative path, it is relative to KPCDUMPER_HOME.
+ * Dump folder must exist.
  */
 void dump_core(const char* corefile);
 

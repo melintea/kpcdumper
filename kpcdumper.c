@@ -20,6 +20,13 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Aurelian Melinte <ame01_at_gmx_dot_net>");
+MODULE_DESCRIPTION("On-demand process core dumping device");
+MODULE_VERSION("0.1");
+
+
 #define STR(x)   #x
 #define TOSTR(x) STR(x)
 
@@ -60,7 +67,6 @@ static char *g_envp[] = {
 };
 
 static dev_t g_majnum;
-//static int g_majnum = 0; 
 static struct class*  g_class  = NULL;
 static struct device* g_device = NULL;
 static struct cdev    g_cdev;
@@ -255,8 +261,3 @@ static void __exit kpcdumper_exit(void)
  
 module_init(kpcdumper_init);
 module_exit(kpcdumper_exit);
-
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Aurelian Melinte <ame01_at_gmx_dot_net>");
-MODULE_DESCRIPTION("On-demand process core dumping device");
-MODULE_VERSION("0.1");

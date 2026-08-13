@@ -32,6 +32,7 @@ test: all
 	sudo insmod $(MODULE).ko
 	lsmod | grep $(MODULE)
 	ls -l /dev/$(MODULE)
+	-sudo rm -f /tmp/*.core /tmp/gdb*
 	./testapp
 	sudo dmesg --time-format delta | grep $(MODULE) 
 	-ls -l /tmp/*.core /tmp/gdb*
@@ -45,4 +46,4 @@ clean:
 	-rm testapp
 	-rm libkpcdumper.a 
 	-sudo rmmod $(MODULE).ko
-	-sudo rm /tmp/gdb.log /tmp/*.core
+	-sudo rm -f /tmp/gdb.log /tmp/*.core

@@ -55,6 +55,10 @@ void dump_core(const char* corefile)
     int fd = open(kpcddev, O_RDWR);
     if (fd < 0) {
         //printf("%s open failed %s\n", kpcddev, strerror(errno));
+	
+        //mret = mtx_unlock(&g_dumping);
+        //assert(mret == thrd_success);
+	
         abort(); // We still get the core...
     }
     

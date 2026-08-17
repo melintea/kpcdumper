@@ -177,6 +177,7 @@ kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
         break;
     
     default:
+        printk(KERN_WARNING KPCDUMPER_DEVNAME ": kpcdumper_ioctl: unsupported: %d\n", ioctl_num);
         return -ENOTTY;
     
     } // switch

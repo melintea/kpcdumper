@@ -58,22 +58,22 @@ void dump_core(const char* corefile)
     };
     sigaction(SIGDUMPDONE, &satrap, NULL);
 
-    
-    static const char* kpcddev = "/dev/"KPCDUMPER_DEVNAME;
-    int fd __attribute__((cleanup(open_guard))) = open(kpcddev, O_RDWR);
-    if (fd < 0) {
-        //printf("%s open failed %s\n", kpcddev, strerror(errno));
-    
-        //mret = mtx_unlock(&g_dumping);
-        //assert(mret == thrd_success);
-    
-        abort(); // We still get the core...
+    {
+        static const char* kpcddev = "/dev/"KPCDUMPER_DEVNAME;
+        int fd __attribute__((cleanup(open_guard))) = open(kpcddev, O_RDWR);
+        if (fd < 0) {
+            //printf("%s open failed %s\n", kpcddev, strerror(errno));
+        
+            //mret = mtx_unlock(&g_dumping);
+            //assert(mret == thrd_success);
+        
+            abort(); // We still get the core...
+        }
+        
+        ioctl(fd, IOCTL_SET_MSG, corefile);
+        
+        //close(fd); // closed by open_guard
     }
-    
-    ioctl(fd, IOCTL_SET_MSG, corefile);
-    
-    //close(fd); // closed by open_guard
-
 
     while (false == atomic_load(&g_dumpdone)) {
         //printf("Waiting out %s...\n", corefile);

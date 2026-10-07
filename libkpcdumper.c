@@ -24,6 +24,13 @@
 static atomic_bool g_dumpdone = ATOMIC_VAR_INIT(false);
 static mtx_t       g_dumping;
 
+static inline void open_guard(int* pfd)
+{
+    if (pfd && *pfd >= 0) { 
+        close(*pfd); 
+    };
+}
+
 void dumpdone_handler(int sig)
 {
     //printf("Signal %d\n", sig);
@@ -50,9 +57,10 @@ void dump_core(const char* corefile)
         .sa_flags   = SA_RESETHAND
     };
     sigaction(SIGDUMPDONE, &satrap, NULL);
+
     
     static const char* kpcddev = "/dev/"KPCDUMPER_DEVNAME;
-    int fd = open(kpcddev, O_RDWR);
+    int fd __attribute__((cleanup(open_guard))) = open(kpcddev, O_RDWR);
     if (fd < 0) {
         //printf("%s open failed %s\n", kpcddev, strerror(errno));
     
@@ -64,8 +72,8 @@ void dump_core(const char* corefile)
     
     ioctl(fd, IOCTL_SET_MSG, corefile);
     
-    close(fd);
-    
+    //close(fd); // closed by open_guard
+
 
     while (false == atomic_load(&g_dumpdone)) {
         //printf("Waiting out %s...\n", corefile);

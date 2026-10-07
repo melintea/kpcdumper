@@ -44,6 +44,7 @@ int main(int argc, char** argv)
     ::printf("%s: PID %d\n", argv[0], getpid());
 
     std::vector<std::thread> threads;
+    threads.emplace_back(func1, "/tmp/foo/bar/baz//kpc6.core"); // no core
     threads.emplace_back(func1, "./kpc1.core"); // relative to KPCDUMPER_HOME
     threads.emplace_back(func1, "kpc2.core");
     threads.emplace_back(func1, "./kpc3.core");

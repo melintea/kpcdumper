@@ -103,9 +103,10 @@ kpcdumper_release(struct inode *inode, struct file *file)
 }
 
 static long 
-kpcdumper_ioctl(//struct inode *inode,    /* see include/linux/fs.h */
-        struct file *file,    /* ditto */
-        unsigned int ioctl_num,    /* number and param for ioctl */
+kpcdumper_ioctl(
+        //struct inode  *inode,     /* see include/linux/fs.h */
+        struct file   *file,      /* ditto */
+        unsigned int  ioctl_num,  /* number and param for ioctl */
         unsigned long ioctl_param)
 {
     printk(KERN_INFO KPCDUMPER_DEVNAME ": kpcdumper_ioctl\n");

@@ -20,7 +20,7 @@ libkpcdumper.a: libkpcdumper.o
 	ar rcs $@ $^
 	
 libkpcdumper.o: libkpcdumper.c
-	gcc -c -Wall -ggdb $<
+	gcc -c -Wall -ggdb -std=gnu11 $<
 
 #TODO: dep on libkpcdumper.a
 testapp: testapp.cpp

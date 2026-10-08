@@ -24,6 +24,7 @@
 static atomic_bool g_dumpdone = ATOMIC_VAR_INIT(false);
 static mtx_t       g_dumping;
 
+// -std=gnu11 for nested functions
 static inline void open_guard(int* pfd)
 {
     if (pfd && *pfd >= 0) { 

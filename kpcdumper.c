@@ -115,7 +115,7 @@ kpcdumper_ioctl(
     
     switch(ioctl_num) {
     case IOCTL_SET_MSG:
-    // return or g_cmds must deliver a SIGCONT
+        // return or g_cmds must deliver a SIGCONT
         send_sig(SIGSTOP, current, 0);
     
         int  length = 0;

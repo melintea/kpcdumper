@@ -4,8 +4,7 @@ It consist of a kernel module which will run ```gdb gcore``` on demand from the 
 
 Usage:
 - build
-- insert the kernel module
-- create the dump device
+- insert the kernel module, check ```/dev/kpcdumper``` / ```KPCDUMPER_DEVNAME``` exists
 - link the app with the static library
 - call ```dump_core()``` as needed. NOT to be called from signal handlers.
 

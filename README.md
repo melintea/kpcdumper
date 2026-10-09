@@ -27,6 +27,7 @@ Usage:
 
 ## Similar tools & various links
 
-- https://code.google.com/archive/p/google-coredumper/
 - ```userfaultfd```
-
+  - caveat: threads continue running as long as not writing to memory
+- https://code.google.com/archive/p/google-coredumper/
+  - caveat: threads are stopped one at a time

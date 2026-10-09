@@ -21,7 +21,6 @@
 
 
 // TODO: sig_atomic_t?
-static atomic_bool g_dumpdone = ATOMIC_VAR_INIT(false);
 static mtx_t       g_dumping;
 
 // -std=gnu11 for nested functions
@@ -41,22 +40,6 @@ static inline void mtx_unlock_guard(void* pp)
     }
 }
 
-static inline void atomic_store_guard(void* pp)
-{
-    if ((atomic_bool**)pp && *(atomic_bool**)pp) {
-        __auto_type p = *((atomic_bool**)pp);
-        atomic_store(p, false);
-    }
-}
-
-void dumpdone_handler(int sig)
-{
-    //printf("Signal %d\n", sig);
-    bool old = atomic_load(&g_dumpdone);
-    assert(old == false);
-    atomic_store(&g_dumpdone, true);
-}
-
 void dump_core(const char* corefile)
 {
 
@@ -64,41 +47,23 @@ void dump_core(const char* corefile)
     assert(mret == thrd_success);
     mtx_t* mtxGuard __attribute__((cleanup(mtx_unlock_guard))) = &g_dumping;
 
+    //printf("Dumping %s\n", corefile);
+
     {
-        while (true == atomic_load(&g_dumpdone)) {
-            //printf("Waiting in %s...\n", corefile);
-            usleep(1000*10L);
+        static const char* kpcddev = "/dev/"KPCDUMPER_DEVNAME;
+        int fd __attribute__((cleanup(open_guard))) = open(kpcddev, O_RDWR);
+        if (fd < 0) {
+            //printf("%s open failed %s\n", kpcddev, strerror(errno));
+            
+            //mret = mtx_unlock(&g_dumping);
+            //assert(mret == thrd_success);
+           
+            abort(); // We still get the core...
         }
-        atomic_bool* doneFlagGuard __attribute__((cleanup(atomic_store_guard))) = &g_dumpdone;
-        //printf("Dumping %s\n", corefile);
-    
-        struct sigaction satrap = { 
-            .sa_handler = dumpdone_handler,
-            .sa_flags   = SA_RESETHAND
-        };
-        sigaction(SIGDUMPDONE, &satrap, NULL);
+            
+        ioctl(fd, IOCTL_SET_MSG, corefile);
+    } // open_guard(fd)
 
-        {
-            static const char* kpcddev = "/dev/"KPCDUMPER_DEVNAME;
-            int fd __attribute__((cleanup(open_guard))) = open(kpcddev, O_RDWR);
-            if (fd < 0) {
-                //printf("%s open failed %s\n", kpcddev, strerror(errno));
-            
-                //mret = mtx_unlock(&g_dumping);
-                //assert(mret == thrd_success);
-            
-                abort(); // We still get the core...
-            }
-            
-            ioctl(fd, IOCTL_SET_MSG, corefile);
-        } // open_guard(fd)
-
-        while (false == atomic_load(&g_dumpdone)) {
-            //printf("Waiting out %s...\n", corefile);
-            usleep(1000*10L);
-        } 
-    } // atomic_guard(g_dumpdone)
-    
     // mtx_guard(g_dumping)
 }
 

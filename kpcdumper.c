@@ -58,7 +58,6 @@ static const char  g_cmdsfmt[] =
        "-ex 'attach %d' -ex 'gcore %s' " 
        "-ex detach -ex quit "
    "; /usr/bin/kill -CONT %d "
-   "; /usr/bin/kill -"TOSTR(SIGDUMPDONE) " %d "
    ;
 static char *g_envp[] = { 
     "HOME="KPCDUMPER_HOME, 
@@ -153,8 +152,7 @@ kpcdumper_ioctl(
                             g_cmdsfmt, 
                             procpid,     // attach
                             g_dumpfile,  // core file
-                            procpid,     // SIGCONT
-                            procpid);    // SIGDUMPDONE
+                            procpid);    // SIGCONT
         printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, g_cmds);
         if (tlen >= BUFLEN) {
             printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);

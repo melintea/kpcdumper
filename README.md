@@ -22,7 +22,6 @@ Usage:
 - The thread calling ```dump_core``` will wait until the dump completes.
   Other threads in the application will continue running for a few jiffies 
   after that call is entered, until the module SIGSTOPs the program. 
-- Uses a custom signal handler (default: SIGUSR1)
 - YMMV with different kernel versions.
 - Secure Boot, ```selinux``` and such might interfere with.
   - [signmod](https://github.com/cipherswami/signmod) may or may not help

@@ -11,7 +11,6 @@ extern "C" {
 
 #define KPCDUMPER_DEVNAME "kpcdumper"      // keep in sync with the Makefile
 #define KPCDUMPER_MAGIC  (137)             // 
-#define SIGDUMPDONE       SIGUSR1          // signal.h
 #define KPCDUMPER_HOME    "/tmp"
 #define GDB               "/usr/bin/gdb"   // "/opt/gdb163/bin/gdb"
 

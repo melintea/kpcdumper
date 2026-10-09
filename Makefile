@@ -4,7 +4,6 @@
 
 # keep in sync with kpcdumper .h 
 MODULE = kpcdumper
-#CONFIG_MODULE_SIG=n
 
 obj-m += $(MODULE).o
    

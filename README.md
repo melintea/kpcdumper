@@ -28,4 +28,5 @@ Usage:
 ## Similar tools & various links
 
 - https://code.google.com/archive/p/google-coredumper/
+- ```userfaultfd```
 

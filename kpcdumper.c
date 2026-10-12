@@ -72,7 +72,7 @@ static struct class*  g_class  = NULL;
 static struct device* g_device = NULL;
 static struct cdev    g_cdev;
 
-static DEFINE_MUTEX(g_kpcdumper_lock);
+static DEFINE_MUTEX(g_kpcdumper_lock); // open/close
 static char g_cmds[BUFLEN+1]     = {0};
 static char g_dumpfile[BUFLEN+1] = {0};
 
@@ -101,6 +101,36 @@ kpcdumper_release(struct inode *inode, struct file *file)
     return SUCCESS;
 }
 
+static int gcore(pid_t procpid, const char* dumpfile)
+{
+    int tlen = snprintf(g_cmds, sizeof(g_cmds), 
+                        g_cmdsfmt, 
+                        procpid,     // attach
+                        g_dumpfile,  // core file
+                        procpid);    // SIGCONT
+    printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, g_cmds);
+    if (tlen >= BUFLEN) {
+        printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);
+        send_sig(SIGCONT, current, 0);
+        return -E2BIG;
+    }
+    
+    char *argv[] = { 
+        "/bin/sh", "-c", 
+        g_cmds,
+        NULL
+    };
+    for (int i=0; argv[i] != NULL; ++i) {
+        printk(KERN_INFO KPCDUMPER_DEVNAME ":    %s\n", argv[i]);
+    }
+    
+    // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not
+    int gret = call_usermodehelper(argv[0], argv, g_envp, UMH_WAIT_EXEC);
+    printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);
+    return gret;
+}
+
+// g_kpcdumper_lock/open/close protected
 static long 
 kpcdumper_ioctl(
         //struct inode  *inode,     /* see include/linux/fs.h */
@@ -147,30 +177,7 @@ kpcdumper_ioctl(
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", 
                g_dumpfile, ldf, procpid);
 
-        // gcore 
-        int tlen = snprintf(g_cmds, sizeof(g_cmds), 
-                            g_cmdsfmt, 
-                            procpid,     // attach
-                            g_dumpfile,  // core file
-                            procpid);    // SIGCONT
-        printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, g_cmds);
-        if (tlen >= BUFLEN) {
-            printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);
-            send_sig(SIGCONT, current, 0);
-            return -E2BIG;
-        }
-    
-        char *argv[] = { 
-            "/bin/sh", "-c", 
-            g_cmds,
-            NULL
-        };
-        for (int i=0; argv[i] != NULL; ++i) {
-            printk(KERN_INFO KPCDUMPER_DEVNAME ":    %s\n", argv[i]);
-        }
-    
-        // UMH_WAIT_PROC will deadlock, SIGSTOP/CONT or not
-        int gret = call_usermodehelper(argv[0], argv, g_envp, UMH_WAIT_EXEC);
+        int gret = gcore(procpid, g_dumpfile);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);
         
         break;

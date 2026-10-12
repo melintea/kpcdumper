@@ -189,7 +189,7 @@ kpcdumper_ioctl(
                g_dumpfile, ldf, procpid);
         WARN_ON(g_dumpfile[0] != '/'); // absolute path
 
-#ifdef CONFIG_COREDUMP
+#if defined(CONFIG_COREDUMP) && ! defined(USE_GCORE)
         int gret = kcore(procpid, g_dumpfile);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": kcore: %d\n", gret);
 #else

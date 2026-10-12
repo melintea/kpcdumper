@@ -12,6 +12,8 @@ extern "C" {
 #define KPCDUMPER_DEVNAME "kpcdumper"      // keep in sync with the Makefile
 #define KPCDUMPER_MAGIC  (137)             // 
 #define KPCDUMPER_HOME    "/tmp"
+
+//#define USE_GCORE  (1) // force gcore/gdb
 #define GDB               "/usr/bin/gdb"   // "/opt/gdb163/bin/gdb"
 
 #define IOCTL_SET_MSG   _IOW(KPCDUMPER_MAGIC, 1, char*) // Userspace writes to kernel

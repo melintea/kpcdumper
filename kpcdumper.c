@@ -134,8 +134,9 @@ static int gcore(pid_t procpid, const char* dumpfile)
 static int kcore(pid_t procpid, const char* dumpfile)
 {
     // TODO: 
-    // - vfs_coredump: v6.17+
-    // - do_coredump before
+    // - vfs_coredump: v6.17+; uses on /proc/sys/kernel/core_pattern
+    // - do_coredump before: same core_pattern dep
+    // - filp_open(struct file *) && elf_core_dump() ?
     return gcore(procpid, dumpfile);
 }
 

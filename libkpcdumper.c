@@ -53,7 +53,8 @@ void dump_core(const char* corefile)
     assert(corefile);
     const char* filep = corefile;
     if (corefile[0] != '/') {
-        snprintf(g_dumpfile, sizeof(g_dumpfile), "%s/%s", KPCDUMPER_HOME, corefile);
+        int sret = snprintf(g_dumpfile, sizeof(g_dumpfile), "%s/%s", KPCDUMPER_HOME, corefile);
+        assert(sret != -1 && sret <= sizeof(g_dumpfile));
         filep = g_dumpfile;
     }
 

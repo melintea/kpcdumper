@@ -187,7 +187,7 @@ kpcdumper_ioctl(
         int ldf = copy_from_user(g_dumpfile, (char *)ioctl_param, length); 
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", 
                g_dumpfile, ldf, procpid);
-	WARN_ON(g_dumpfile[0] != '/'); // absolute path
+        WARN_ON(g_dumpfile[0] != '/'); // absolute path
 
 #ifdef CONFIG_COREDUMP
         int gret = kcore(procpid, g_dumpfile);

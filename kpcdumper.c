@@ -133,7 +133,9 @@ static int gcore(pid_t procpid, const char* dumpfile)
 
 static int kcore(pid_t procpid, const char* dumpfile)
 {
-    // TODO: do_coredump
+    // TODO: 
+    // - vfs_coredump: v6.17+
+    // - do_coredump before
     return gcore(procpid, dumpfile);
 }
 

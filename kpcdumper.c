@@ -14,6 +14,7 @@
 #include <linux/ioctl.h>
 #include <linux/kernel.h>
 #include <linux/kmod.h>
+#include <linux/limits.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/printk.h>
@@ -36,7 +37,7 @@ MODULE_VERSION("0.1");
 #ifdef BUFLEN
 #  error BUFLEN already defined
 #endif
-#define BUFLEN (4096) // PATH_MAX?
+#define BUFLEN (PATH_MAX)
 
 
 #ifdef SUCCESS
@@ -186,6 +187,7 @@ kpcdumper_ioctl(
         int ldf = copy_from_user(g_dumpfile, (char *)ioctl_param, length); 
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", 
                g_dumpfile, ldf, procpid);
+	WARN_ON(g_dumpfile[0] != '/'); // absolute path
 
 #ifdef CONFIG_COREDUMP
         int gret = kcore(procpid, g_dumpfile);

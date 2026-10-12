@@ -7,8 +7,10 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -21,7 +23,8 @@
 
 
 // TODO: sig_atomic_t?
-static mtx_t       g_dumping;
+static mtx_t   g_dumping;
+static char    g_dumpfile[PATH_MAX]  = {0};
 
 // -std=gnu11 for nested functions
 static inline void open_guard(int* pfd)
@@ -46,6 +49,13 @@ void dump_core(const char* corefile)
     int mret = mtx_lock(&g_dumping);
     assert(mret == thrd_success);
     mtx_t* mtxGuard __attribute__((cleanup(mtx_unlock_guard))) = &g_dumping;
+    
+    assert(corefile);
+    const char* filep = corefile;
+    if (corefile[0] != '/') {
+        snprintf(g_dumpfile, sizeof(g_dumpfile), "%s/%s", KPCDUMPER_HOME, corefile);
+        filep = g_dumpfile;
+    }
 
     //printf("Dumping %s\n", corefile);
 
@@ -61,7 +71,7 @@ void dump_core(const char* corefile)
             abort(); // We still get the core...
         }
             
-        ioctl(fd, IOCTL_SET_MSG, corefile);
+        ioctl(fd, IOCTL_SET_MSG, filep);
     } // open_guard(fd)
 
     // mtx_guard(g_dumping)

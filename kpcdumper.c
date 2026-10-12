@@ -6,6 +6,7 @@
 
 #include <asm/signal.h>
 #include <linux/cdev.h>
+#include <linux/coredump.h>
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/init.h>
@@ -130,6 +131,12 @@ static int gcore(pid_t procpid, const char* dumpfile)
     return gret;
 }
 
+static int kcore(pid_t procpid, const char* dumpfile)
+{
+    // TODO: do_coredump
+    return gcore(procpid, dumpfile);
+}
+
 // g_kpcdumper_lock/open/close protected
 static long 
 kpcdumper_ioctl(
@@ -177,8 +184,13 @@ kpcdumper_ioctl(
         printk(KERN_INFO KPCDUMPER_DEVNAME ": device_write: '%s'/%d from %d\n", 
                g_dumpfile, ldf, procpid);
 
+#ifdef CONFIG_COREDUMP
+        int gret = kcore(procpid, g_dumpfile);
+        printk(KERN_INFO KPCDUMPER_DEVNAME ": kcore: %d\n", gret);
+#else
         int gret = gcore(procpid, g_dumpfile);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);
+#endif // CONFIG_COREDUMP
         
         break;
     

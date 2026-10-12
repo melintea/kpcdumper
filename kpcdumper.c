@@ -5,16 +5,20 @@
 #include "kpcdumper.h"
 
 #include <asm/signal.h>
+#include <linux/binfmts.h>
 #include <linux/cdev.h>
 #include <linux/coredump.h>
 #include <linux/device.h>
+#include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/ioctl.h>
 #include <linux/kernel.h>
 #include <linux/kmod.h>
+#include <linux/kprobes.h>
 #include <linux/limits.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/printk.h>
@@ -78,31 +82,6 @@ static DEFINE_MUTEX(g_kpcdumper_lock); // open/close
 static char g_cmds[BUFLEN+1]     = {0};
 static char g_dumpfile[BUFLEN+1] = {0};
 
-/* 
- * This is called whenever a process attempts to open the device file 
- */
-static int 
-kpcdumper_open(struct inode *inode, struct file *file)
-{
-    printk(KERN_INFO KPCDUMPER_DEVNAME ": device_open(%p)\n", file);
-
-    mutex_lock(&g_kpcdumper_lock);
-    
-    try_module_get(THIS_MODULE);
-    return SUCCESS;
-}
-
-static int 
-kpcdumper_release(struct inode *inode, struct file *file)
-{
-    printk(KERN_INFO KPCDUMPER_DEVNAME ": device_release(%p,%p)\n", inode, file);
-
-    mutex_unlock(&g_kpcdumper_lock);
-
-    module_put(THIS_MODULE);
-    return SUCCESS;
-}
-
 static int gcore(pid_t procpid, const char* dumpfile)
 {
     int tlen = snprintf(g_cmds, sizeof(g_cmds), 
@@ -113,7 +92,6 @@ static int gcore(pid_t procpid, const char* dumpfile)
     printk(KERN_INFO KPCDUMPER_DEVNAME ": %d: %s\n", tlen, g_cmds);
     if (tlen >= BUFLEN) {
         printk(KERN_ERR KPCDUMPER_DEVNAME ": %d bytes\n", tlen);
-        send_sig(SIGCONT, current, 0);
         return -E2BIG;
     }
     
@@ -132,13 +110,75 @@ static int gcore(pid_t procpid, const char* dumpfile)
     return gret;
 }
 
-static int kcore(pid_t procpid, const char* dumpfile)
+// Cannot use __attribute__((cleanup(filp_close_guard))) : will keep mod refs
+static inline void filp_close_guard(void* pp)
 {
-    // TODO: 
+    __auto_type ppf = (struct file**)pp;
+    if (ppf && *ppf) {
+        __auto_type p = *ppf;
+        filp_close(p, NULL);
+    }
+}
+
+typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
+static struct linux_binfmt *get_elf_binfmt(void)
+{
+    struct kprobe kp = {
+        .symbol_name = "kallsyms_lookup_name",
+    };
+    if (register_kprobe(&kp) < 0) {
+        pr_err("Failed to register kprobe for symbol lookup\n");
+        return NULL;
+    }
+
+    kallsyms_lookup_name_t lookupname = (kallsyms_lookup_name_t)kp.addr;
+    unregister_kprobe(&kp);
+
+    if (!lookupname) {
+        pr_err("No address for kallsyms_lookup_name\n");
+        return NULL;
+    }
+
+    struct linux_binfmt* elffmt = (struct linux_binfmt *)lookupname("elf_format");
+    return elffmt;
+}
+
+static int kcore(const char* dumpfile)
+{
+    // Notes: 
     // - vfs_coredump: v6.17+; uses on /proc/sys/kernel/core_pattern
     // - do_coredump before: same core_pattern dep
-    // - filp_open(struct file *) && elf_core_dump() ?
-    return gcore(procpid, dumpfile);
+    // - alternative: filp_open(struct file *) && elf_core_dump()
+
+    struct linux_binfmt* elffmt = get_elf_binfmt();
+    if (!elffmt) {
+        pr_err("No elf_format\n");
+        return -ENOENT;
+    }
+    
+    struct file* file = 
+        filp_open(dumpfile, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (IS_ERR(file)) {
+        pr_err("Failed to open %s: %ld\n", dumpfile, PTR_ERR(file));
+        return PTR_ERR(file);
+    }
+    
+    struct coredump_params cprm;
+    memset(&cprm, 0, sizeof(cprm));
+    cprm.siginfo = NULL;          // Or fill out a custom struct kernel_siginfo
+    //cprm.regs = task_pt_regs(current); // Architecture specific CPU registers
+    cprm.file = file;             // Directing output to our open VFS descriptor
+    cprm.limit = RLIM_INFINITY;   // Overriding standard user shell limits
+    cprm.mm_flags = current->mm->flags;
+    
+    pr_info("Dumping %s\n", dumpfile);
+    int dret = -ENOENT; //elffmt->core_dump(&cprm); // FIXME: call jams
+    pr_info("Dump %s ret %d\n", dumpfile, dret);
+    
+    filp_close(file, NULL);
+    return dret;
+
+    //return gcore(current->tgid, dumpfile);
 }
 
 // g_kpcdumper_lock/open/close protected
@@ -190,12 +230,16 @@ kpcdumper_ioctl(
         WARN_ON(g_dumpfile[0] != '/'); // absolute path
 
 #if defined(CONFIG_COREDUMP) && ! defined(USE_GCORE)
-        int gret = kcore(procpid, g_dumpfile);
+        int gret = kcore(g_dumpfile);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": kcore: %d\n", gret);
 #else
         int gret = gcore(procpid, g_dumpfile);
         printk(KERN_INFO KPCDUMPER_DEVNAME ": gcore: %d\n", gret);
 #endif // CONFIG_COREDUMP
+        if (gret != 0) {
+            send_sig(SIGCONT, current, 0);
+	    return gret; 
+	}
         
         break;
     
@@ -205,6 +249,31 @@ kpcdumper_ioctl(
     
     } // switch
     
+    return SUCCESS;
+}
+
+/* 
+ * This is called whenever a process attempts to open the device file 
+ */
+static int 
+kpcdumper_open(struct inode *inode, struct file *file)
+{
+    printk(KERN_INFO KPCDUMPER_DEVNAME ": device_open(%p)\n", file);
+
+    mutex_lock(&g_kpcdumper_lock);
+    
+    try_module_get(THIS_MODULE);
+    return SUCCESS;
+}
+
+static int 
+kpcdumper_release(struct inode *inode, struct file *file)
+{
+    printk(KERN_INFO KPCDUMPER_DEVNAME ": device_release(%p,%p)\n", inode, file);
+
+    mutex_unlock(&g_kpcdumper_lock);
+
+    module_put(THIS_MODULE);
     return SUCCESS;
 }
 

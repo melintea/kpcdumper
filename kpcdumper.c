@@ -9,6 +9,7 @@
 #include <linux/cdev.h>
 #include <linux/coredump.h>
 #include <linux/device.h>
+#include <linux/elf.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/init.h>
@@ -144,6 +145,153 @@ static struct linux_binfmt *get_elf_binfmt(void)
     return elffmt;
 }
 
+// Placeholder dump_size, fixed up after dropping the mmap lock, for a VMA that
+// may be the start of an ELF mapping. Mirrors fs/coredump.c.
+#define DUMP_SIZE_MAYBE_ELFHDR_PLACEHOLDER 1
+
+// Decide how much of a VMA's contents should be included in the core dump.
+// @see fs/coredump.c:vma_dump_size() honouring the MMF_DUMP_* filter
+// bits snapshotted in mm_flags. The ELF-header case returns a placeholder that
+// snapshot_vmas() resolves once the mmap lock has been dropped.
+static unsigned long vma_dump_size(struct vm_area_struct* vma,
+                                   unsigned long mm_flags)
+{
+#define FILTER(type) (mm_flags & (1UL << MMF_DUMP_##type))
+    if (vma->vm_flags & VM_DONTDUMP) {
+        return 0;
+    }
+    if (is_vm_hugetlb_page(vma)) {
+        if ((vma->vm_flags & VM_SHARED) && FILTER(HUGETLB_SHARED)) {
+            goto whole;
+        }
+        if (!(vma->vm_flags & VM_SHARED) && FILTER(HUGETLB_PRIVATE)) {
+            goto whole;
+        }
+        return 0;
+    }
+    // Do not dump I/O mapped devices or special mappings
+    if (vma->vm_flags & VM_IO) {
+        return 0;
+    }
+    // By default, dump shared memory if mapped from an anonymous file.
+    if (vma->vm_flags & VM_SHARED) {
+        if (file_inode(vma->vm_file)->i_nlink == 0
+                ? FILTER(ANON_SHARED) : FILTER(MAPPED_SHARED)) {
+            goto whole;
+        }
+        return 0;
+    }
+    // Dump segments that have been written to.
+    if ((!IS_ENABLED(CONFIG_MMU) || vma->anon_vma) && FILTER(ANON_PRIVATE)) {
+        goto whole;
+    }
+    if (vma->vm_file == NULL) {
+        return 0;
+    }
+    if (FILTER(MAPPED_PRIVATE)) {
+        goto whole;
+    }
+    // If this is the beginning of an executable file mapping, dump the first
+    // page to aid in determining what was mapped here.
+    if (FILTER(ELF_HEADERS) && vma->vm_pgoff == 0
+            && (vma->vm_flags & VM_READ)) {
+        if ((READ_ONCE(file_inode(vma->vm_file)->i_mode) & 0111) != 0) {
+            return PAGE_SIZE;
+        }
+        // ELF libraries aren't always executable; the mmap lock is held here so
+        // copy_from_user() can't run. Defer the magic check to snapshot_vmas().
+        return DUMP_SIZE_MAYBE_ELFHDR_PLACEHOLDER;
+    }
+#undef FILTER
+    return 0;
+whole:
+    return vma->vm_end - vma->vm_start;
+}
+
+// @see fs/coredump.c:free_vma_snapshot(). 
+static void free_vma_snapshot(struct coredump_params* cprm)
+{
+    if (cprm->vma_meta) {
+        for (int i = 0; i < cprm->vma_count; ++i) {
+            struct file* file = cprm->vma_meta[i].file;
+            if (file) {
+                fput(file);
+            }
+        }
+        kvfree(cprm->vma_meta);
+        cprm->vma_meta = NULL;
+    }
+}
+
+// Under the mmap lock, take a snapshot of the task's VMAs into cprm->vma_meta /
+// vma_count / vma_data_size. elf_core_dump() reads these, so the dump oopses if
+// they are left NULL. @see fs/coredump.c:dump_vma_snapshot(). 
+// free_vma_snapshot()
+static int snapshot_vmas(struct coredump_params* cprm)
+{
+    struct mm_struct* mm = current->mm;
+    struct vm_area_struct* vma = NULL;
+    VMA_ITERATOR(vmi, mm, 0);
+    int i = 0;
+
+    if (!mm) {
+        return -EINVAL;
+    }
+
+    // Write mode matches the kernel: the stack-expansion code can still change
+    // VMA bounds under a read-mode mmap lock.
+    if (mmap_write_lock_killable(mm)) {
+        return -EINTR;
+    }
+
+    cprm->vma_data_size = 0;
+    cprm->vma_count = mm->map_count;
+    cprm->vma_meta = kvmalloc_array(cprm->vma_count, sizeof(*cprm->vma_meta),
+                                    GFP_KERNEL);
+    if (!cprm->vma_meta) {
+        mmap_write_unlock(mm);
+        return -ENOMEM;
+    }
+
+    for_each_vma(vmi, vma) {
+        struct core_vma_metadata* m = cprm->vma_meta + i;
+        if (i >= cprm->vma_count) {
+            break; // map_count is the authoritative bound
+        }
+        m->start     = vma->vm_start;
+        m->end       = vma->vm_end;
+        m->flags     = vma->vm_flags;
+        m->dump_size = vma_dump_size(vma, cprm->mm_flags);
+        m->pgoff     = vma->vm_pgoff;
+        m->file      = vma->vm_file;
+        if (m->file) {
+            get_file(m->file);
+        }
+        ++i;
+    }
+    cprm->vma_count = i; // actual VMAs captured
+
+    mmap_write_unlock(mm);
+
+    // mmap lock is dropped: resolve the deferred ELF-header placeholders and
+    // accumulate the total dumpable size.
+    for (i = 0; i < cprm->vma_count; ++i) {
+        struct core_vma_metadata* m = cprm->vma_meta + i;
+        if (m->dump_size == DUMP_SIZE_MAYBE_ELFHDR_PLACEHOLDER) {
+            char elfmag[SELFMAG];
+            if (copy_from_user(elfmag, (void __user *)m->start, SELFMAG)
+                    || memcmp(elfmag, ELFMAG, SELFMAG) != 0) {
+                m->dump_size = 0;
+            } else {
+                m->dump_size = PAGE_SIZE;
+            }
+        }
+        cprm->vma_data_size += m->dump_size;
+    }
+
+    return 0;
+}
+
 static int kcore(const char* dumpfile)
 {
     // Notes: 
@@ -176,13 +324,22 @@ static int kcore(const char* dumpfile)
     cprm.file = file;             // Directing output to our open VFS descriptor
     cprm.limit = RLIM_INFINITY;   // Overriding standard user shell limits
     cprm.mm_flags = current->mm->flags;
-    
-    pr_info("Dumping %s\n", dumpfile);
+
+    int sret = snapshot_vmas(&cprm);
+    if (sret != 0) {
+        pr_err("Failed to snapshot VMAs for %s: %d\n", dumpfile, sret);
+        filp_close(file, NULL);
+        return sret;
+    }
+
+    pr_info("Dumping %s (%d vmas, %zu bytes)\n",
+            dumpfile, cprm.vma_count, cprm.vma_data_size);
     file_start_write(cprm.file);
-    int dret = elffmt->core_dump(&cprm); // FIXME: oops on null cprm.vma_meta
+    int dret = elffmt->core_dump(&cprm);
     file_end_write(cprm.file);
     pr_info("Dump %s ret %d\n", dumpfile, dret);
-    
+
+    free_vma_snapshot(&cprm);
     filp_close(file, NULL);
     return dret;
 

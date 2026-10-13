@@ -22,7 +22,7 @@ Usage:
   Other threads in the application will continue running for a few jiffies 
   after that call is entered, until the module SIGSTOPs the program. 
 - YMMV with different kernel versions.
-  - ```#define USE_GCORE``` might help. Or not.
+  - ```#define USE_GCORE``` in ```kpcdumper.h``` might help. Or not.
 - Secure Boot, ```selinux``` and such might interfere with.
   - [signmod](https://github.com/cipherswami/signmod) may or may not help
 

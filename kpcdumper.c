@@ -7,6 +7,7 @@
 #include <asm/signal.h>
 #include <linux/binfmts.h>
 #include <linux/cdev.h>
+#include <linux/completion.h>
 #include <linux/coredump.h>
 #include <linux/device.h>
 #include <linux/elf.h>
@@ -23,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/printk.h>
+#include <linux/sched/signal.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
@@ -121,7 +123,13 @@ static inline void filp_close_guard(void* pp)
     }
 }
 
-#if ! defined(USE_GCORE)
+/*
+ * Kernel-native dump. A lot is duplicated from fs/coredump.c
+ * to work around /proc/sys/kernel/core_pattern and other
+ * restrictions. 
+ */
+#if defined(CONFIG_COREDUMP) && ! defined(USE_GCORE)
+
 typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
 static struct linux_binfmt *get_elf_binfmt(void)
 {
@@ -160,6 +168,9 @@ static unsigned long vma_dump_size(struct vm_area_struct* vma,
     if (vma->vm_flags & VM_DONTDUMP) {
         return 0;
     }
+    
+    // Older kernel versions do not have the API
+    #if 1
     if (is_vm_hugetlb_page(vma)) {
         if ((vma->vm_flags & VM_SHARED) && FILTER(HUGETLB_SHARED)) {
             goto whole;
@@ -169,6 +180,8 @@ static unsigned long vma_dump_size(struct vm_area_struct* vma,
         }
         return 0;
     }
+    #endif
+    
     // Do not dump I/O mapped devices or special mappings
     if (vma->vm_flags & VM_IO) {
         return 0;
@@ -292,12 +305,91 @@ static int snapshot_vmas(struct coredump_params* cprm)
     return 0;
 }
 
+// elf_core_dump()->fill_note_info() walks current->signal->core_state->dumper
+// to build an NT_PRSTATUS note for every thread being dumped. The real kernel
+// path sets signal->core_state in zap_threads(); calling core_dump() directly
+// leaves it NULL, so fill_note_info() dereferences NULL and oopses.
+//
+// Mirror zap_threads()'s dumper list: the dumping thread (current) is the list
+// head in dumper.task and is NOT repeated in the .next chain; every OTHER
+// thread of the group is linked via .next. nr_threads counts those others.
+// fill_note_info() emits the head first, then walks dumper.next for the rest.
+//
+// The target process is SIGSTOP-ed by the ioctl before we get here, so the
+// sibling threads are not running and their register state is stable -- no need
+// to freeze them as zap_threads() would. The .next nodes are kzalloc'd here and
+// released in teardown_core_state().
+static int setup_core_state(struct core_state* core, struct task_struct* dumper)
+{
+    struct task_struct* t = NULL;
+    int others = 0;
+
+    memset(core, 0, sizeof(*core));
+    core->dumper.task = dumper;
+    core->dumper.next = NULL;
+    init_completion(&core->startup);
+
+    rcu_read_lock();
+    for_each_thread(dumper, t) {
+        if (t == dumper) {
+            continue; // the dumper is the list head, not a .next node
+        }
+
+        struct core_thread* node = kzalloc(sizeof(*node), GFP_ATOMIC);
+        if (!node) {
+            rcu_read_unlock();
+            // Unwind the partial list we built; core_state was never published.
+            struct core_thread* c = core->dumper.next;
+            while (c) {
+                struct core_thread* n = c->next;
+                put_task_struct(c->task);
+                kfree(c);
+                c = n;
+            }
+            core->dumper.next = NULL;
+            return -ENOMEM;
+        }
+
+        get_task_struct(t);
+        node->task = t;
+        node->next = core->dumper.next;
+        core->dumper.next = node;
+        ++others;
+    }
+    rcu_read_unlock();
+
+    atomic_set(&core->nr_threads, others);
+
+    // fill_note_info() reads signal->core_state on this same thread.
+    current->signal->core_state = core;
+
+    pr_info(KPCDUMPER_DEVNAME ": core_state: 1 dumper + %d other threads\n",
+            others);
+    return 0;
+}
+
+static void teardown_core_state(void)
+{
+    struct core_state* core = current->signal->core_state;
+    if (core) {
+        struct core_thread* c = core->dumper.next;
+        while (c) {
+            struct core_thread* n = c->next;
+            put_task_struct(c->task);
+            kfree(c);
+            c = n;
+        }
+        core->dumper.next = NULL;
+    }
+    current->signal->core_state = NULL;
+}
+
 static int kcore(const char* dumpfile)
 {
     // Notes: 
     // - vfs_coredump: v6.17+; uses on /proc/sys/kernel/core_pattern
-    // - do_coredump before: same core_pattern dep
-    // - alternative: filp_open(struct file *) && elf_core_dump()
+    // - do_coredump (older API): same core_pattern dep
+    // - alternative: DYI filp_open(struct file *) && elf_core_dump()
 
     struct linux_binfmt* elffmt = get_elf_binfmt();
     if (!elffmt || !elffmt->core_dump) {
@@ -312,10 +404,17 @@ static int kcore(const char* dumpfile)
         return PTR_ERR(file);
     }
     file->f_mode |= FMODE_CAN_WRITE;
-    
+
+    // fill_note_info() reads cprm.siginfo->si_signo; it must not be NULL.
+    // SIGQUIT is the conventional "dump core" signal.
+    struct kernel_siginfo siginfo;
+    memset(&siginfo, 0, sizeof(siginfo));
+    siginfo.si_signo = SIGQUIT;
+    siginfo.si_code  = SI_USER;
+
     struct coredump_params cprm;
     memset(&cprm, 0, sizeof(cprm));
-    cprm.siginfo = NULL;          // Or fill out a custom struct kernel_siginfo
+    cprm.siginfo = &siginfo;
     //  Architecture specific CPU registers. task_pt_regs(current) contains the 
     //  register state of the ioctl syscall itself, not the state of the app; 
     //  must parse and look up its thread references using find_vpid() so its 
@@ -332,12 +431,25 @@ static int kcore(const char* dumpfile)
         return sret;
     }
 
+    // Publish the core_state (dumper + all group threads) fill_note_info()
+    // walks, then clear it after the dump.
+    struct core_state core;
+    int cret = setup_core_state(&core, current);
+    if (cret != 0) {
+        pr_err("Failed to set up core_state for %s: %d\n", dumpfile, cret);
+        free_vma_snapshot(&cprm);
+        filp_close(file, NULL);
+        return cret;
+    }
+
     pr_info("Dumping %s (%d vmas, %zu bytes)\n",
             dumpfile, cprm.vma_count, cprm.vma_data_size);
     file_start_write(cprm.file);
     int dret = elffmt->core_dump(&cprm);
     file_end_write(cprm.file);
     pr_info("Dump %s ret %d\n", dumpfile, dret);
+
+    teardown_core_state();
 
     free_vma_snapshot(&cprm);
     filp_close(file, NULL);
@@ -404,8 +516,8 @@ kpcdumper_ioctl(
 #endif // CONFIG_COREDUMP
         if (gret != 0) {
             send_sig(SIGCONT, current, 0);
-	    return gret; 
-	}
+            return gret; 
+        }
         
         break;
     

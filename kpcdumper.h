@@ -13,7 +13,11 @@ extern "C" {
 #define KPCDUMPER_MAGIC  (137)             // 
 #define KPCDUMPER_HOME    "/tmp"
 
-#define USE_GCORE  (1) // force gcore/gdb
+// Kernel-native dump has a lot of code duplicating the logic in fs/coredump.c
+// to work around /proc/sys/kernel/core_pattern and more.
+// This is a out-of-tree module and, as that code will change, it will stop compiling.
+// The gdb path is slower but not brittle.
+//#define USE_GCORE  (1) // force gcore/gdb
 #define GDB               "/usr/bin/gdb"   // "/opt/gdb163/bin/gdb"
 
 #define IOCTL_SET_MSG   _IOW(KPCDUMPER_MAGIC, 1, char*) // Userspace writes to kernel

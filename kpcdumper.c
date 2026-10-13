@@ -120,6 +120,7 @@ static inline void filp_close_guard(void* pp)
     }
 }
 
+#if ! defined(USE_GCORE)
 typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
 static struct linux_binfmt *get_elf_binfmt(void)
 {
@@ -151,7 +152,7 @@ static int kcore(const char* dumpfile)
     // - alternative: filp_open(struct file *) && elf_core_dump()
 
     struct linux_binfmt* elffmt = get_elf_binfmt();
-    if (!elffmt) {
+    if (!elffmt || !elffmt->core_dump) {
         pr_err("No elf_format\n");
         return -ENOENT;
     }
@@ -162,17 +163,24 @@ static int kcore(const char* dumpfile)
         pr_err("Failed to open %s: %ld\n", dumpfile, PTR_ERR(file));
         return PTR_ERR(file);
     }
+    file->f_mode |= FMODE_CAN_WRITE;
     
     struct coredump_params cprm;
     memset(&cprm, 0, sizeof(cprm));
     cprm.siginfo = NULL;          // Or fill out a custom struct kernel_siginfo
-    //cprm.regs = task_pt_regs(current); // Architecture specific CPU registers
+    //  Architecture specific CPU registers. task_pt_regs(current) contains the 
+    //  register state of the ioctl syscall itself, not the state of the app; 
+    //  must parse and look up its thread references using find_vpid() so its 
+    //  stack frame does not change while dumping.
+    //cprm.regs = task_pt_regs(current); 
     cprm.file = file;             // Directing output to our open VFS descriptor
     cprm.limit = RLIM_INFINITY;   // Overriding standard user shell limits
     cprm.mm_flags = current->mm->flags;
     
     pr_info("Dumping %s\n", dumpfile);
-    int dret = -ENOENT; //elffmt->core_dump(&cprm); // FIXME: call jams
+    file_start_write(cprm.file);
+    int dret = elffmt->core_dump(&cprm); // FIXME: oops on null cprm.vma_meta
+    file_end_write(cprm.file);
     pr_info("Dump %s ret %d\n", dumpfile, dret);
     
     filp_close(file, NULL);
@@ -180,6 +188,7 @@ static int kcore(const char* dumpfile)
 
     //return gcore(current->tgid, dumpfile);
 }
+#endif // USE_GCORE
 
 // g_kpcdumper_lock/open/close protected
 static long 
